@@ -7,12 +7,25 @@ Your knowledge is only overshadowed by your stupidity, Starscrem. - Megatron
 LOWEST_VAL = 1e-36
 
 # importing the required dependencies
+import utils # util functions
 import numpy as np # matrix math
 import tensorflow as tf # ML
 
 class Transformer(object):
-	"""docstring for TransformerNetwork"""
-	def __init__(self, VOCAB_SIZE, scope = 'transformer_network', NUM_HEADS = 8, DIM_MODEL = 512,
+	"""
+	Transformer network is a type of neural network designed to be used for sequential data processing without
+	the need to use reccurence or convolution. It works solely on attention mechanism.
+		Args:
+			VOCAB_SIZE: number of words in target language
+			scope: scope to be used in tensorflow
+			NUM_HEADS: number of heads in [masked] multihead attention
+			DIM_MODEL: dimension of embedding
+			FF_MID: number of neurons in the middle layer of feed forward networks
+			NUM_STACKS_E: number of stacks in encoder
+			NUM_STACKS_D: number of stacks in decoder
+			WARMUP_STEPS: number of training steps in warmup period
+	"""
+	def __init__(self, VOCAB_SIZE, need_embedding = True, scope = 'transformer_network', NUM_HEADS = 8, DIM_MODEL = 512,
 		FF_MID = 2048, NUM_STACKS_E = 3, NUM_STACKS_D = 3, WARMUP_STEPS = 4000):
 		# constants
 		self.VOCAB_SIZE = VOCAB_SIZE # for final output
@@ -41,13 +54,21 @@ class Transformer(object):
 		self.curr_step = 0
 		self.lr = min(1/np.sqrt(self.curr_step + 1), self.curr_step/np.power(self.WARMUP_STEPS, 1.5))/np.sqrt(self.DIM_MODEL)
 
+		# embeddings
+		self.need_embedding = need_embedding
+		if need_embedding:
+			self.embedding_matrix = tf.Variable(tf.truncated_normal(shape = (self.VOCAB_SIZE, self.DIM_MODEL)))
+
 		# initialize the network
 		self.input_placeholder = tf.placeholder(tf.float32, [None, self.DIM_MODEL], name = 'input_placeholder') # input
 		self.output_placeholder = tf.placeholder(tf.float32, [None, self.DIM_MODEL], name = 'output_placeholder') # output
 		self.labels_placeholder = tf.placeholder(tf.float32, [None, self.VOCAB_SIZE], name = 'labels_placeholder') # vocab converted to one-hot
 		self.position = tf.placeholder(tf.int32, [None], name = 'position')
-		self.make_transformer()
-		self.build_loss()
+
+		# user callable functions
+		self.make_transformer() # make the computation graph
+		self.build_loss() # add the nodes for loss functions
+		self.initialize_network() # initialize the network
 
 	def _masked_multihead_attention(self, Q, K, V, reuse):
 		# this is the place where masking happens, whenever we try to connect the output at further time step to
@@ -212,7 +233,6 @@ class Transformer(object):
 
 			# once the stacks are finished we can then do linear and softmax
 			stacks_out = stack_op_tensors[-1]
-			print('stacks_out:', stacks_out)
 			decoder_op = tf.layers.dense(stacks_out, self.VOCAB_SIZE, activation = tf.nn.softmax)
 
 			return decoder_op
@@ -239,12 +259,12 @@ class Transformer(object):
 		trainable_ops = tf.trainable_variables(scope = 'transformer_network')
 		return trainable_ops
 
-	def run(self, input_seq, output_seq, onehot_label, is_training = True):
+	def run(self, input_seq, output_seq, is_training = True):
 		'''
 		Run a single sentence in transformer
 		Args:
-			intput_seq: the input vector of shape [<Num_words>, E_dim]
-			output_seq: the output value to the transformer network [<Num_words>, E_dim]
+			intput_seq: the input vector of shape [1, <Num_words>]
+			output_seq: the output value to the transformer network [1, <Num_words>]
 			return_sequences: if True return the total array to the 
 		'''
 		# sanity checks
@@ -253,11 +273,42 @@ class Transformer(object):
 
 		# vars
 		transformer_output = []
-		seqlen = len(input_seq)
+		seqlen = len(input_seq[0]) # due to the shape of input
 		# input_seq = None --> # get the input embeddings here
 
 		# making the masking lookup table for this sequence
 		masking_matrix = np.array([([1,] * (i+1)) + ([LOWEST_VAL,] * (seqlen - i - 1)) for i in range(seqlen)], dtype = np.float32)
+
+		# if we need to make our own embedding
+		embed_in = [] # input embeddings
+		embed_out = [] # output embedding
+		labels = [] # labels
+
+		# get the embeddings
+		if self.need_embedding:
+			for i in range(len(input_seq[0])):
+				# since the input is going to be [1, <NUM WORDS>] so we need to use only the first index
+				val_in = input_seq[0][i]
+				val_out = output_seq[0][i]
+
+				# for each value get the embedding
+				embed_val_in = self.sess.run(tf.nn.embedding_lookup(self.embedding_matrix, np.int32(val_in)))
+				embed_val_out = self.sess.run(tf.nn.embedding_lookup(self.embedding_matrix, np.int32(val_out)))
+				pos_enc_val = utils.positional_encoding(i, self.DIM_MODEL)
+
+				# add the mulitplication of embeddings to amin list
+				embed_in.append(embed_val_in * pos_enc_val)
+				embed_out.append(embed_val_out * pos_enc_val)
+
+				# labels
+				zeros = np.zeros([1, self.VOCAB_SIZE])
+				zeros[0][val_out] = 1.
+				labels.append(zeros)
+
+			# replace the 
+			input_seq = np.array(embed_in)
+			output_seq = np.array(embed_out)
+			labels = np.array(labels)
 
 		# variables to make if we are training
 		if is_training:
@@ -265,10 +316,10 @@ class Transformer(object):
 
 		# run over the seqlen
 		for i in range(seqlen):
-			# prepare the data for this sequence
+			# make the feed_dict
 			feed = {self.input_placeholder: input_seq,
 				self.output_placeholder: output_seq,
-				self.labels_placeholder: onehot_label,
+				self.labels_placeholder: labels[i],
 				self.generated_length: [i],
 				self.masking_matrix: masking_matrix}
 			
@@ -290,4 +341,5 @@ class Transformer(object):
 
 	def save_model():
 		# save the model as a frozen graph
+		print('Saving part to be added')
 		pass
