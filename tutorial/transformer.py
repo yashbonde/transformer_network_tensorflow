@@ -1,8 +1,10 @@
 '''
 Your knowledge is only overshadowed by your stupidity, Starscrem. - Megatron
+
+# transformer network
 '''
 
-LOWEST_VAL = 1e-36 # since negative infinity is not processed properly, we replace it with a very small value
+LOWEST_VAL = 1e-36
 
 # importing the required dependencies
 import utils # util functions
@@ -23,7 +25,7 @@ class Transformer(object):
 			NUM_STACKS_D: number of stacks in decoder
 			WARMUP_STEPS: number of training steps in warmup period
 	"""
-	# initialization code
+	# initialization function
 	def __init__(self, VOCAB_SIZE, need_embedding = True, scope = 'transformer_network', NUM_HEADS = 8, DIM_MODEL = 512,
 		FF_MID = 2048, NUM_STACKS_E = 3, NUM_STACKS_D = 3, WARMUP_STEPS = 4000):
 		# constants
@@ -71,6 +73,9 @@ class Transformer(object):
 	
 	# internal functions
 	def multihead_attention(self, V, K, Q, reuse):
+		# normalisation value for multihead attention
+		root_dk = np.sqrt(self.DIM_KEY)
+		
 		with tf.variable_scope('multihead_attention', reuse = reuse):
 			head_tensors = [] # list to store all the output of heads
 			for i in range(self.NUM_HEADS):
@@ -93,13 +98,13 @@ class Transformer(object):
 					q_proj = tf.matmul(Q, weight_q, name = 'q_proj')
 					v_proj = tf.matmul(V, weight_v, name = 'v_proj')
 
-					# Scale Dot Product Attention
+					# scale dot product attention with masking
 					qkt = tf.matmul(q_proj, k_proj, transpose_b = True)
-					qkt /= np.sqrt(self.DIM_KEY)
-					soft_qkt = tf.nn.softmax(qkt)
+					qkt_div = tf.divide(qkt, root_dk)
+					soft_qkt = tf.nn.softmax(qkt_div)
 					head = tf.matmul(soft_qkt, v_proj)
 
-					# add the new
+					# add the new head to heads list
 					head_tensors.append(head)
 
 			# now we proceed to the concatenation
@@ -107,7 +112,7 @@ class Transformer(object):
 			mha_out_weight = tf.get_variable('mha_ow', shape = [head_concat.shape[-1], self.DIM_MODEL])
 			mha_out = tf.matmul(head_concat, mha_out_weight)
 			return mha_out
-		
+
 	def _masked_multihead_attention(self, Q, K, V, reuse):
 		# this is the place where masking happens, whenever we try to connect the output at further time step to
 		# the ones behind, this is only used in this case. Otherwise you can use the simple multihead attention
@@ -155,7 +160,6 @@ class Transformer(object):
 			mmha_out_weight = tf.get_variable('mha_ow', shape = [head_concat.shape[-1], self.DIM_MODEL])
 			mmha_out = tf.matmul(head_concat, mmha_out_weight)
 			return mmha_out
-
 
 	def _encoder(self, enc_in):
 		'''
@@ -341,5 +345,4 @@ class Transformer(object):
 
 	def save_model():
 		# save the model as a frozen graph
-		print('Saving part to be added')
 		pass
