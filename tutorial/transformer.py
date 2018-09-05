@@ -1,10 +1,8 @@
 '''
 Your knowledge is only overshadowed by your stupidity, Starscrem. - Megatron
-
-# transformer network
 '''
 
-LOWEST_VAL = 1e-36
+LOWEST_VAL = 1e-36 # since negative infinity is not processed properly, we replace it with a very small value
 
 # importing the required dependencies
 import utils # util functions
@@ -25,6 +23,7 @@ class Transformer(object):
 			NUM_STACKS_D: number of stacks in decoder
 			WARMUP_STEPS: number of training steps in warmup period
 	"""
+	# initialization code
 	def __init__(self, VOCAB_SIZE, need_embedding = True, scope = 'transformer_network', NUM_HEADS = 8, DIM_MODEL = 512,
 		FF_MID = 2048, NUM_STACKS_E = 3, NUM_STACKS_D = 3, WARMUP_STEPS = 4000):
 		# constants
@@ -69,7 +68,8 @@ class Transformer(object):
 		self.make_transformer() # make the computation graph
 		self.build_loss() # add the nodes for loss functions
 		self.initialize_network() # initialize the network
-
+	
+	# internal functions
 	def _masked_multihead_attention(self, Q, K, V, reuse):
 		# this is the place where masking happens, whenever we try to connect the output at further time step to
 		# the ones behind, this is only used in this case. Otherwise you can use the simple multihead attention
@@ -236,7 +236,8 @@ class Transformer(object):
 			decoder_op = tf.layers.dense(stacks_out, self.VOCAB_SIZE, activation = tf.nn.softmax)
 
 			return decoder_op
-
+	
+	# user callable functions
 	def make_transformer(self):
 		with tf.variable_scope(self.scope):
 			# stack
@@ -253,7 +254,7 @@ class Transformer(object):
 		self.sess = tf.Session()
 		self.sess.run(tf.global_variables_initializer())
 
-	#### PUBLIC FUNCITONS ####
+	# operation functions
 	def get_variables(self):
 		# return the list of all the trianable variables
 		trainable_ops = tf.trainable_variables(scope = 'transformer_network')
