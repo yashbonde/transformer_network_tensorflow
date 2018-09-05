@@ -70,6 +70,44 @@ class Transformer(object):
 		self.initialize_network() # initialize the network
 	
 	# internal functions
+	def multihead_attention(self, V, K, Q, reuse):
+		with tf.variable_scope('multihead_attention', reuse = reuse):
+			head_tensors = [] # list to store all the output of heads
+			for i in range(self.NUM_HEADS):
+				# iterate over all the linear layers
+				if not reuse:
+					# this is the first time it has been called
+					# common sense tells that if we are not reusing the outer loop then it is first time
+					# since all the projection weight for linear networks are different
+					reuse_linear = False
+				else:
+					reuse_linear = True
+				with tf.variable_scope('linear' + str(i), reuse = reuse_linear):
+					# weight value
+					weight_q = tf.get_variable('weight_q_l' + str(i), (self.DIM_MODEL, self.DIM_KEY), initializer = tf.truncated_normal_initializer)
+					weight_k = tf.get_variable('weight_k_l' + str(i), (self.DIM_MODEL, self.DIM_KEY), initializer = tf.truncated_normal_initializer)
+					weight_v = tf.get_variable('weight_v_l' + str(i), (self.DIM_MODEL, self.DIM_VALUE), initializer = tf.truncated_normal_initializer)
+					
+					# projected values
+					k_proj = tf.matmul(K, weight_k, name = 'k_proj')
+					q_proj = tf.matmul(Q, weight_q, name = 'q_proj')
+					v_proj = tf.matmul(V, weight_v, name = 'v_proj')
+
+					# Scale Dot Product Attention
+					qkt = tf.matmul(q_proj, k_proj, transpose_b = True)
+					qkt /= np.sqrt(self.DIM_KEY)
+					soft_qkt = tf.nn.softmax(qkt)
+					head = tf.matmul(soft_qkt, v_proj)
+
+					# add the new
+					head_tensors.append(head)
+
+			# now we proceed to the concatenation
+			head_concat = tf.reshape(tf.stack(head_tensors), [-1, self.DIM_MODEL])
+			mha_out_weight = tf.get_variable('mha_ow', shape = [head_concat.shape[-1], self.DIM_MODEL])
+			mha_out = tf.matmul(head_concat, mha_out_weight)
+			return mha_out
+		
 	def _masked_multihead_attention(self, Q, K, V, reuse):
 		# this is the place where masking happens, whenever we try to connect the output at further time step to
 		# the ones behind, this is only used in this case. Otherwise you can use the simple multihead attention
@@ -117,45 +155,6 @@ class Transformer(object):
 			mmha_out_weight = tf.get_variable('mha_ow', shape = [head_concat.shape[-1], self.DIM_MODEL])
 			mmha_out = tf.matmul(head_concat, mmha_out_weight)
 			return mmha_out
-
-
-	def multihead_attention(self, V, K, Q, reuse):
-		with tf.variable_scope('multihead_attention', reuse = reuse):
-			head_tensors = [] # list to store all the output of heads
-			for i in range(self.NUM_HEADS):
-				# iterate over all the linear layers
-				if not reuse:
-					# this is the first time it has been called
-					# common sense tells that if we are not reusing the outer loop then it is first time
-					# since all the projection weight for linear networks are different
-					reuse_linear = False
-				else:
-					reuse_linear = True
-				with tf.variable_scope('linear' + str(i), reuse = reuse_linear):
-					# weight value
-					weight_q = tf.get_variable('weight_q_l' + str(i), (self.DIM_MODEL, self.DIM_KEY), initializer = tf.truncated_normal_initializer)
-					weight_k = tf.get_variable('weight_k_l' + str(i), (self.DIM_MODEL, self.DIM_KEY), initializer = tf.truncated_normal_initializer)
-					weight_v = tf.get_variable('weight_v_l' + str(i), (self.DIM_MODEL, self.DIM_VALUE), initializer = tf.truncated_normal_initializer)
-					
-					# projected values
-					k_proj = tf.matmul(K, weight_k, name = 'k_proj')
-					q_proj = tf.matmul(Q, weight_q, name = 'q_proj')
-					v_proj = tf.matmul(V, weight_v, name = 'v_proj')
-
-					# Scale Dot Product Attention
-					qkt = tf.matmul(q_proj, k_proj, transpose_b = True)
-					qkt /= np.sqrt(self.DIM_KEY)
-					soft_qkt = tf.nn.softmax(qkt)
-					head = tf.matmul(soft_qkt, v_proj)
-
-					# add the new
-					head_tensors.append(head)
-
-			# now we proceed to the concatenation
-			head_concat = tf.reshape(tf.stack(head_tensors), [-1, self.DIM_MODEL])
-			mha_out_weight = tf.get_variable('mha_ow', shape = [head_concat.shape[-1], self.DIM_MODEL])
-			mha_out = tf.matmul(head_concat, mha_out_weight)
-			return mha_out
 
 
 	def _encoder(self, enc_in):
