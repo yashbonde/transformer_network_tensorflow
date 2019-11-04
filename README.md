@@ -3,6 +3,8 @@ Tensorflow implementation of transformer network
 
 You can learn more about the code by reading my blogs [part 1](https://medium.com/datadriveninvestor/lets-build-attention-is-all-you-need-1-2-de377cebe22) and [part 2](https://medium.com/datadriveninvestor/lets-build-attention-is-all-you-need-2-2-11d9a29219c4). This will give you the idea why and how the code is written. For following with the same and understanding the code [tutorial](./tutorial) would be a good start, however note that it is writte for easy understanding and it not the optimal implementation.
 
+The reason this is a good implementation / hack is because this is 100% functional in design, i.e. there are no f0kcin classes, which is a huge benefit, making it easier to maintain and use and reproduce.
+
 ## Usage
 
 For using the network prefer to go for [`transformer`](./transformer), it has a much more stable and scalable parts of code. In beam-search I have removed the caches as felt too clunky and difficult to use. To test the network run the command
