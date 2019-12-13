@@ -14,8 +14,6 @@ import sentencepiece as spm
 from tqdm import tqdm
 
 # custom
-
-
 import transformer.baseline as transformer_model
 from transformer.ops_util import ModelConfig
 from transformer.beam_search import beam_search
