@@ -3,7 +3,7 @@ Tensorflow implementation of transformer network
 
 You can learn more about the code by reading my blogs [part 1](https://medium.com/datadriveninvestor/lets-build-attention-is-all-you-need-1-2-de377cebe22) and [part 2](https://medium.com/datadriveninvestor/lets-build-attention-is-all-you-need-2-2-11d9a29219c4). This will give you the idea why and how the code is written. For following with the same and understanding the code [tutorial](./use_cases/tutorial) would be a good start, however note that it is writte for easy understanding and it not the optimal implementation.
 
-**NOTE**
+**NOTE: This is a ported model working on my desktop but it has not been tested on the machien I am using to push this code.**
 
 The reason this is a good implementation / hack is because this is 100% functional in design, i.e. there are no f0kcin classes, which is a huge benefit, making it easier to maintain and use and reproduce.
 
