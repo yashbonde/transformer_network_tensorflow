@@ -3,8 +3,6 @@ as the checkpoint system. I still haven't figured out an easy way to use the emb
 visualisation in a easy fashion where our tokens keep changing.
 06.11.2019 - @yashbonde
 """
-import sys;
-# sys.stdout.close()
 
 # import dependencies
 from transformer.ops_util import ModelConfig
@@ -96,6 +94,7 @@ def symbols_to_logits_fn(model, config, decoder_tensor, debug = False):
     # gather and get the emebddings for the yet decoded sequence and send to the decoder
     decoder_gather = tf.gather(model.context_embedding, decoder_tensor) + \
         tf.gather(model.position_embedding, positions_for(decoder_tensor, past_length = 0))
+    decoder_gather *= config.embedding_dim ** 0.5
     print('>>>>> {}'.format(decoder_gather))
     encoder_tiled = tf.tile(model.encoder_embedding, [config.beam_size, 1, 1])
     print('>>> encoder_tiled: {}'.format(encoder_tiled))

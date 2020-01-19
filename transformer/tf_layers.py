@@ -38,7 +38,6 @@ def softmax_with_reduce_max(inp, axis=-1):
     sm = ex / tf.reduce_sum(ex, axis=axis, keepdims=True)
     return sm
 
-
 def normalise_tensor(inp, scope, *, axis=-1, epsilon=1e-5):
     """
     Normalize the input values between 0 and 1, then do diagonal affine transform
@@ -50,8 +49,10 @@ def normalise_tensor(inp, scope, *, axis=-1, epsilon=1e-5):
     """
     with tf.variable_scope(scope):
         e_dim = inp.get_shape().as_list()[-1]
-        g = tf.get_variable('g', [e_dim], initializer=tf.constant_initializer(1))
-        b = tf.get_variable('b', [e_dim], initializer=tf.constant_initializer(0))
+        g = tf.get_variable(
+            'g', [e_dim], initializer=tf.constant_initializer(1))
+        b = tf.get_variable(
+            'b', [e_dim], initializer=tf.constant_initializer(0))
 
         u = tf.reduce_mean(inp, axis=axis, keepdims=True)
         s = tf.reduce_mean(tf.square(inp - u), axis=axis, keepdims=True)
@@ -59,7 +60,6 @@ def normalise_tensor(inp, scope, *, axis=-1, epsilon=1e-5):
         out = out * g + b
 
         return out
-
 
 def split_into_n_states(inp, n):
     """
@@ -72,7 +72,6 @@ def split_into_n_states(inp, n):
     out = tf.reshape(inp, start + [n, m // n])
     return out
 
-
 def merge_n_states(inp):
     """
     merge the last two dimensions
@@ -83,8 +82,7 @@ def merge_n_states(inp):
     out = tf.reshape(inp, start + [m * n])
     return out
 
-
-def conv1d(inp, scope, num_features, weights_init_stddev=0.2, return_param = False):
+def ff(inp, scope, num_features, weights_init_stddev=0.2, return_param=False):
     """
     1D convolutional block, first reshape input then matmul weights and then reshape
 
@@ -111,11 +109,6 @@ def conv1d(inp, scope, num_features, weights_init_stddev=0.2, return_param = Fal
             return out
         return out, weights, bias
 
-def ff(inp, scope, num_features, weights_init_stddev=0.2, return_param = False):
-    # to fix the name of function from conv1d to ff
-    return conv1d(inp, scope, num_features, weights_init_stddev, return_param)
-
-
 def attention_mask_future(nd, ns, dtype=tf.float32):
     """
     1's in the lower traingle, couting from lower right corner
@@ -127,18 +120,16 @@ def attention_mask_future(nd, ns, dtype=tf.float32):
     out = tf.cast(m, dtype)
     return out
 
-
-def attention_mask_key(key_mask, num_tile, dtype = tf.float32):
+def attention_mask_key(key_mask, num_tile, dtype=tf.float32):
     """
     We do not want our outputs to be affeted by the garbage in <PAD> so we take the
     key mask and get it to 
     """
     key_mask = tf.cast(key_mask, dtype)
-    key_mask = tf.tile(key_mask, [num_tile, 1]) # (h*N, seqlen)
+    key_mask = tf.tile(key_mask, [num_tile, 1])  # (h*N, seqlen)
     key_mask = tf.expand_dims(key_mask, 1)  # (h*N, 1, seqlen)
     mask = key_mask * - tf.cast(1e10, dtype)
     return mask
-
 
 def attention(q, k, v, e_dim, config, key_mask, mask_future_weights=True, scope='attention'):
     """
@@ -160,7 +151,8 @@ def attention(q, k, v, e_dim, config, key_mask, mask_future_weights=True, scope=
 
     def merge_heads(x):
         dim0, *rest_shapes = shapes_list(x)
-        x_reshaped = tf.reshape(x, [dim0 // config.num_heads, config.num_heads, *rest_shapes])
+        x_reshaped = tf.reshape(
+            x, [dim0 // config.num_heads, config.num_heads, *rest_shapes])
         out = merge_n_states(tf.transpose(x_reshaped, [0, 2, 1, 3]))
         return out
 
@@ -179,54 +171,40 @@ def attention(q, k, v, e_dim, config, key_mask, mask_future_weights=True, scope=
             key_mask: [batch_size, seqlen]
         '''
         dim0, nd, ns = shapes_list(w)
-        num_batches = shapes_list(key_mask)[0] # --> true because `w` may change during beam search
+        num_batches = shapes_list(key_mask)[0]
         b = attention_mask_key(key_mask, dim0 // num_batches, w.dtype)
-        # print('>>>>>>> mask: {}'.format(b))
-        # print('dim0: {}, nd: {}, ns: {}, num_batches: {}'.format(dim0, nd, ns, num_batches))
-        # w = tf.reshape(w, [num_batches * num_heads, nd, ns]) + b
-        # print('>>>> NEW WEIGHTS: {}'.format(w))
-        # w = tf.reshape(w, [num_batches, num_heads, nd, ns])
         return w + b
 
     def multihead_attention(q, k, v, key_mask, future_mask=True):
         '''q -----> [N*n, seqlen, edim/h]
         key_mask -> [N, seqlen] '''
-        # print('000000> v: {}'.format(v))
         w = tf.matmul(q, k, transpose_b=True)
         w *= tf.math.rsqrt(tf.cast(v.shape[-1].value, w.dtype))
-        # print('---> MHA attention weight: {}'.format(w))
-        # print('---> key_mask: {} '.format(key_mask))
 
         # mask attention weights
         w = mask_attention_weights_key(w, key_mask)
-        # print('WWWWWWW> {}'.format(w))
         if future_mask:
             w = mask_attention_weights_future(w)
-        # print('MMMMMMM> {}'.format(w))
-        w = tf.layers.dropout(softmax_with_reduce_max(w), 0.3, training = config.training)
+        w = tf.layers.dropout(softmax_with_reduce_max(w),
+                              0.3, training=config.training)
         out = tf.matmul(w, v)
         return out
 
     with tf.variable_scope(scope):
         # projection on convolution + splitting
-        q_ = split_heads(conv1d(q, 'q_proj', e_dim)) # [N*n, seqlen, edim/h]
-        k_ = split_heads(conv1d(k, 'k_proj', e_dim)) # [N*n, seqlen, edim/h]
-        v_ = split_heads(conv1d(v, 'v_proj', e_dim)) # [N*n, seqlen, edim/h]
-
-        # print('----> q_: {}'.format(q_))
-        # print('----> k_: {}'.format(k_))
-        # print('----> v_: {}'.format(v_))
+        q_ = split_heads(ff(q, 'q_proj', e_dim))  # [N*n, seqlen, edim/h]
+        k_ = split_heads(ff(k, 'k_proj', e_dim))  # [N*n, seqlen, edim/h]
+        v_ = split_heads(ff(v, 'v_proj', e_dim))  # [N*n, seqlen, edim/h]
 
         # attention
         att = multihead_attention(q_, k_, v_, key_mask, mask_future_weights)
 
         # merging
         out = merge_heads(att) + q
-        out = conv1d(out, 'conv_projection', e_dim)
+        out = ff(out, 'conv_projection', e_dim)
         return out
 
-
-def multilayer_perceptron(inp, scope, hidden_dim):
+def multilayer_perceptron(inp, scope, hidden_dim, act='relu'):
     """
     MLP
 
@@ -235,11 +213,16 @@ def multilayer_perceptron(inp, scope, hidden_dim):
     :param hidden_dim: hidden dimension
     :return: output processed tensor
     """
+    ACT = {
+        "relu": tf.nn.relu,
+        "gelu": gelu_activation
+    }
     with tf.variable_scope(scope):
         nx = inp.shape[-1].value
-        out = conv1d(inp, 'convolutional_ff', hidden_dim)
-        out = gelu_activation(out)
-        out = conv1d(out, 'convolutional_reproj', nx) # re-projection
+        out = ff(inp, 'convolutional_ff', hidden_dim)
+        if act in ACT:
+            out = ACT[act](out)
+        out = ff(out, 'convolutional_reproj', nx)  # re-projection
         return out
 
 
@@ -255,7 +238,8 @@ def encoder_block(q, ext_mask, scope, config):
     with tf.variable_scope(scope):
         nx = shapes_list(q)[-1]
         # self attention block
-        attn = attention(q, q, q, nx, config, ext_mask, mask_future_weights=False, scope = 'self-attention')
+        attn = attention(q, q, q, nx, config, ext_mask,
+                         mask_future_weights=False, scope='self-attention')
         out = normalise_tensor(attn + q, 'ln_1')
 
         # mlp
@@ -263,7 +247,6 @@ def encoder_block(q, ext_mask, scope, config):
         out = normalise_tensor(out + mlp_out, 'ln_2')
 
         return out
-
 
 def decoder_block(q, k, v, enc_mask, dec_mask, scope, config):
     """
@@ -279,11 +262,13 @@ def decoder_block(q, k, v, enc_mask, dec_mask, scope, config):
         nx = shapes_list(q)[-1]
 
         # self attention block
-        attn = attention(q, q, q, nx, config, dec_mask, mask_future_weights=True, scope = 'self-attention')
+        attn = attention(q, q, q, nx, config, dec_mask,
+                         mask_future_weights=True, scope='self-attention')
         out = normalise_tensor(attn + q, 'ln_1')
 
         # external attention block
-        attn = attention(out, k, v, nx, config, enc_mask, mask_future_weights=False, scope = 'ext-attention')
+        attn = attention(out, k, v, nx, config, enc_mask,
+                         mask_future_weights=False, scope='ext-attention')
         out = normalise_tensor(attn + out, 'ln_2')
 
         # mlp
@@ -303,7 +288,6 @@ def past_shape(config, seqlen=None):
              config.embedding_dim // config.num_heads]
     return shape
 
-
 def expand_tile(value, size):
     """
     expand value to size
@@ -318,7 +302,6 @@ def expand_tile(value, size):
     out = tf.tile(out, [size] + [1, ] * ndims)
     return out
 
-
 def positions_for(tokens, past_length):
     """
     get positions only for a input tokens
@@ -332,16 +315,13 @@ def positions_for(tokens, past_length):
     out = expand_tile(past_length + tf.range(nsteps), batch_size)
     return out
 
-
 def embed_sequence(*inp_seq, in_dim, out_dim, scope):
     """perform embedding on input tensors and return tensors and weight matrix"""
     tensors_to_embed = tuple(tensor for tensor in inp_seq)
     with tf.variable_scope(scope):
-        w = tf.get_variable(scope + '_matrix', shape = [in_dim, out_dim])
+        w = tf.get_variable(scope + '_matrix', shape=[in_dim, out_dim])
         out = [tf.gather(w, tensor) for tensor in tensors_to_embed]
-
         return out, w
-
 
 def noam_scheme(init_lr, global_step, warmup_steps=4000.):
     '''Noam scheme learning rate decay
@@ -352,7 +332,6 @@ def noam_scheme(init_lr, global_step, warmup_steps=4000.):
     '''
     step = tf.cast(global_step + 1, dtype=tf.float32)
     return init_lr * warmup_steps ** 0.5 * tf.minimum(step * warmup_steps ** -1.5, step ** -0.5)
-
 
 def label_smoothing(inputs, epsilon=0.1):
     return ((1-epsilon) * inputs) + (epsilon / shapes_list(inputs)[-1])
